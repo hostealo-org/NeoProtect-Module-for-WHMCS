@@ -19,7 +19,7 @@ This project integrates the [NeoProtect API](https://neoprotect.net) with WHMCS,
 - **GEO / ASN Filtering:** Enable or disable country or ASN blocking for incoming traffic. Users can whitelist or blacklist countries and ASNs to control access to their IP.
 - **Profiles:** Configure custom profiles to adjust firewall mitigation settings based on ports, protocols, and presets. Default action profiles (Filter or Drop) can also be set.
   
-### IP Ownership Verification**
+### IP Ownership Verification
 - **Secure Access:** Before any action, the module verifies that the current WHMCS user owns the IP address through WHMCS’s internal API, ensuring only authorized changes are made.
  
 ## Screenshots
