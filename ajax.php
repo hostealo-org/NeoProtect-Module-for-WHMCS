@@ -141,7 +141,6 @@ switch ($action) {
             exit;
         }
         $url = "https://api.neoprotect.net/v2/profiles/$profileId";
-        // Para PUT, usamos CURLOPT_CUSTOMREQUEST en apiRequest
         $response = apiRequest($url, "PUT", $jsonData);
         echo json_encode($response);
         break;
