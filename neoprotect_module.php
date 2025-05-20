@@ -32,6 +32,22 @@ function neoprotect_module_clientarea($vars) {
     $clientId = isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : 0;
     $services = [];
 
+    // Define the IP prefixes/ranges you want to allow
+    $allowedIpPrefixes = [
+        '45',      // e.g. all IPs starting with 45
+        // '46.17', // add more prefixes as needed
+        // '203.0.113',
+    ];
+
+    $isAllowedIp = function($ip) use ($allowedIpPrefixes) {
+        foreach ($allowedIpPrefixes as $prefix) {
+            if (strpos($ip, $prefix) === 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     if ($clientId) {
         $command  = 'GetClientsProducts';
         $postData = [
@@ -49,19 +65,21 @@ function neoprotect_module_clientarea($vars) {
 
                 $hostname = !empty($prod['domain']) ? $prod['domain'] : 'No hostname';
 
+                // Check dedicated IP
                 if (!empty($prod['dedicatedip'])) {
                     $ip = trim($prod['dedicatedip']);
-                    if (strpos($ip, '45') === 0 && !isset($ipSet[$ip])) {
+                    if ($isAllowedIp($ip) && !isset($ipSet[$ip])) {
                         $services[] = ['ip' => $ip, 'hostname' => $hostname];
                         $ipSet[$ip] = true;
                     }
                 }
 
+                // Check any additional assigned IPs
                 if (!empty($prod['assignedips'])) {
                     $extraIps = explode(',', $prod['assignedips']);
                     foreach ($extraIps as $ipVal) {
                         $ip = trim($ipVal);
-                        if (strpos($ip, '45') === 0 && !isset($ipSet[$ip])) {
+                        if ($isAllowedIp($ip) && !isset($ipSet[$ip])) {
                             $services[] = ['ip' => $ip, 'hostname' => $hostname];
                             $ipSet[$ip] = true;
                         }
@@ -69,7 +87,6 @@ function neoprotect_module_clientarea($vars) {
                 }
             }
         }
-
     }
 
     $language = $_SESSION['Language'];
