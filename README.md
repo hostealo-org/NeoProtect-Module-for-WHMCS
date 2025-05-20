@@ -35,23 +35,27 @@ This project integrates the [NeoProtect API](https://neoprotect.net) with WHMCS,
 
 1. **Clone the Repository**
 
-   Clone or download the repository into your WHMCS /modules/addons/ directory.
+   Clone or download the repository into your WHMCS `/modules/addons/` directory.
 
-2. **Configure API Key**
+2. **Name the Module Folder**
+
+   Ensure the addon’s folder is named exactly `neoprotect_module`. WHMCS will not detect the module if the folder name differs.
+
+3. **Configure API Key**
 
    Open the `ajax.php` file and go to line 8. Replace the placeholder API key with your actual NeoProtect API key:
    ```php
    $api_key = "YOUR_NEOPROTECT_API_KEY_HERE";
    ```
 
-3. **Set the IP Range**
+4. **Set the IP Range**
 
-   Open the `neoprotect_module.php` file and locate lines 54 and 64. Configure these lines to specify the IP range for your deployment.  
-   For example, if your IP range starts with `45.`, set these lines to cover that entire range (e.g., all IPs starting with `45.`).
+   Open the `neoprotect_module.php` file and locate line 36. Configure these lines to specify the IP prefixes for your deployment.  
+   For example, if your IP range starts with `45.`, add `'45'` to the `$allowedIpPrefixes` array.
 
-4. **Ensure WHMCS Compatibility**
+5. **Ensure WHMCS Compatibility**
 
-   - Make sure your WHMCS installation is properly configured.
+   - Make sure your WHMCS installation is properly configured.  
    - Verify that the server has cURL enabled in PHP to handle API requests.
 
 ## Usage
