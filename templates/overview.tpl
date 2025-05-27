@@ -1,5 +1,12 @@
 <!-- Toastr CSS for notifications -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" rel="stylesheet"/>
+<!-- World map -->
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<!-- Chart.js CSS (optional sizing) -->
+<style>
+    .chart-container { width: 100%; height: 300px; margin: 10px 0; }
+    .attack-details h5 { margin-top: 0; }
+</style>
 
 <!-- IP Selector -->
 <div class="row mb-3">
@@ -654,7 +661,7 @@
                         <div class="tab-pane fade" id="attacks" role="tabpanel" aria-labelledby="attacks-tab">
                             <div id="attackLoadingIndicator" class="text-center my-3"></div>
                             <table class="table table-striped" id="attackHistoryTable">
-                                <caption class="text-center">Actualizado automáticamente cada 5 segundos</caption>
+                                <caption class="text-center">Actualizado automáticamente cada 60 segundos</caption>
                                 <thead>
                                 <tr>
                                     <th>Host</th>
@@ -664,6 +671,7 @@
                                     <th>End</th>
                                     <th>PPS (packets per second)</th>
                                     <th>BTS (bits per second)</th>
+                                    <th>Attack Info</th>
                                 </tr>
                                 </thead>
                                 <tbody>
@@ -927,8 +935,10 @@
     </div>
 </div>
 
-<!-- Toastr JS -->
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
     {literal}
@@ -1406,57 +1416,132 @@
         return dateStr.substring(0, 19).replace("T", " ");
     }
 
-    function getAttacks() {
-        const ip = getSelectedIp();
+    function decodeBase64(str){try{return JSON.parse(atob(str));}catch{return{}}}
+    function topEntries(obj,n){return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);}
 
-        $.post("/modules/addons/neoprotect_module/ajax.php", {
-            action: "getAttacks",
-            ip
-        }, function(data) {
-            const attacks = data;
+    const dataFields = [
+        { key: 'sourceIps', label: 'Top Source IPs' },
+        { key: 'protocols', label: 'Top Protocols' },
+        { key: 'ttls', label: 'Top TTLs' },
+        { key: 'sourceAsns', label: 'Top Source ASNs' },
+        { key: 'sourcePorts', label: 'Top Source Ports' },
+        { key: 'destinationPorts', label: 'Top Destination Ports' }
+    ];
 
-            const table = $("#attackHistoryTable");
-            const tbody = table.find("tbody");
+    function renderInfoRow(id, info) {
+        let html = `<tr class="attack-info" data-id="${id}"><td colspan="8"><div class="attack-details"><h5>Attack Details</h5>`;
+        // Map first, full width
+        html += `<div class="row"><div class="col-12" id="map-countries-${id}" style="width:100%;height:300px;margin:10px 0;"></div></div>`;
+        // Top Countries chart centered
+        html += `<div class="row"><div class="col-lg-6 offset-lg-3 chart-container"><canvas id="chart-countries-${id}"></canvas></div></div>`;
+        // Other charts in two columns
+        html += `<div class="row">`;
+        dataFields.forEach(f => {
+            // skip countries field here
+            html += `<div class="col-lg-6 chart-container"><canvas id="chart-${f.key}-${id}"></canvas></div>`;
+        });
+        html += `</div></div></td></tr>`;
+        return html;
+    }
 
-            tbody.empty();
-
-            if (attacks.length === 0) {
-                tbody.append("<tr><td colspan='7' class='text-center'>No attacks found</td></tr>");
-            } else {
-                attacks.forEach(function(attack) {
-                    attack.signatures.forEach(function(signature) {
-                        const row = $("<tr></tr>");
-
-                        const throughputGbps = (signature.bpsPeak * 8) / 1e9;
-                        let throughputText = "";
-                        if (throughputGbps < 1) {
-                            throughputText = ((signature.bpsPeak * 8) / 1e6).toFixed(2) + " Mbps";
-                        } else {
-                            throughputText = throughputGbps.toFixed(2) + " Gbps";
-                        }
-
-                        const ppsFormatted = Number(signature.ppsPeak).toLocaleString('es-ES');
-
-                        let statusHtml = "";
-                        if (!signature.endedAt) {
-                            statusHtml = "<i class='fas fa-spinner fa-spin'></i> Mitigating";
-                        } else {
-                            statusHtml = "<i class='fas fa-check'></i> Mitigated";
-                        }
-
-                        row.append($("<td></td>").text(attack.dstAddressString || ""));
-                        row.append($("<td></td>").html(statusHtml));
-                        row.append($("<td></td>").text(signature.name || ""));
-                        row.append($("<td></td>").text(formatDate(signature.startedAt) || ""));
-                        row.append($("<td></td>").text(formatDate(signature.endedAt) || ""));
-                        row.append($("<td></td>").text(ppsFormatted || ""));
-                        row.append($("<td></td>").text(throughputText || ""));
-
-                        tbody.append(row);
-                    });
-                });
+    function initCharts(id, info) {
+        // Top Countries bar chart
+        const countries = decodeBase64(info.sourceCountries || '');
+        const countryEntries = topEntries(countries);
+        const countryLabels = countryEntries.map(e => e[0]);
+        const countryValues = countryEntries.map(e => e[1]);
+        const ctxCountries = document.getElementById(`chart-countries-${id}`);
+        if (ctxCountries) {
+            new Chart(ctxCountries, {
+                type: 'bar',
+                data: { labels: countryLabels, datasets: [{ label: 'Top Countries', data: countryValues }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+        // GeoChart map
+        google.charts.load('current', { packages: ['geochart'] });
+        google.charts.setOnLoadCallback(() => {
+            const dataArray = [['Country', 'Attacks']];
+            countryEntries.forEach(([code, count]) => dataArray.push([code, count]));
+            const dataTable = google.visualization.arrayToDataTable(dataArray);
+            const optionsMap = {
+                colorAxis: { colors: ['#FFEDA0', '#F03B20'] },
+                backgroundColor: { fill: '#ffffff' },
+                datalessRegionColor: '#e4e4e4',
+                defaultColor: '#e4e4e4'
+            };
+            const geoChart = new google.visualization.GeoChart(
+                document.getElementById(`map-countries-${id}`)
+            );
+            geoChart.draw(dataTable, optionsMap);
+        });
+        // Other charts
+        dataFields.forEach(f => {
+            const dataObj = decodeBase64(info[f.key] || '');
+            const entries = topEntries(dataObj);
+            const labels = entries.map(e => e[0]);
+            const values = entries.map(e => e[1]);
+            const cid = `chart-${f.key}-${id}`;
+            const ctx = document.getElementById(cid);
+            if (ctx) {
+                const config = {
+                    type: 'bar',
+                    data: { labels, datasets: [{ label: f.label, data: values }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                };
+                // Horizontal for Source IPs
+                if (f.key === 'sourceIps') {
+                    config.options.indexAxis = 'y';
+                }
+                new Chart(ctx, config);
             }
         });
+    }
+
+    function fetchAttackInfo(id, row) {
+        const ip = getSelectedIp();
+
+        $.post('/modules/addons/neoprotect_module/ajax.php', { action: 'getAttackInfo', id, ip })
+            .done(data => {
+                // Remove existing info
+                $(`.attack-info[data-id='${id}']`).remove();
+                // Insert info row
+                row.after(renderInfoRow(id, data));
+                // Initialize charts
+                initCharts(id, data);
+            })
+            .fail(() => toastr.error('Error fetching details'));
+    }
+
+    function getAttacks() {
+        const ip = getSelectedIp();
+        $('#attackLoadingIndicator').show();
+        $.post('/modules/addons/neoprotect_module/ajax.php', { action: 'getAttacks', ip })
+            .done(attacks => {
+                const tbody = $('#attackHistoryTable tbody').empty();
+                if (!attacks || attacks.length===0) {
+                    tbody.append('<tr><td colspan="8" class="text-center">No attacks found</td></tr>');
+                } else {
+                    attacks.forEach(att => att.signatures.forEach(sig => {
+                        const row = $('<tr></tr>');
+                        const pic = (sig.bpsPeak*8/1e9).toFixed(2) < 1
+                            ? `${(sig.bpsPeak*8/1e6).toFixed(2)} Mbps`
+                            : `${(sig.bpsPeak*8/1e9).toFixed(2)} Gbps`;
+                        row.append(`<td>${att.dstAddressString||''}</td>`)
+                            .append(`<td>${sig.endedAt?'<i class="fas fa-check"></i> Mitigated':'<i class="fas fa-spinner fa-spin"></i> Mitigating'}</td>`)
+                            .append(`<td>${sig.name||''}</td>`)
+                            .append(`<td>${formatDate(sig.startedAt)}</td>`)
+                            .append(`<td>${formatDate(sig.endedAt)}</td>`)
+                            .append(`<td>${Number(sig.ppsPeak).toLocaleString('en-US')}</td>`)
+                            .append(`<td>${pic}</td>`);
+                        const infoTd = $('<td><i class="fas fa-info-circle" style="cursor:pointer;" title="View Details"></i></td>');
+                        infoTd.find('i').click(()=>fetchAttackInfo(att.id, row));
+                        row.append(infoTd);
+                        tbody.append(row);
+                    }));
+                }
+            })
+            .always(()=>$('#attackLoadingIndicator').hide());
     }
 
     function saveSettings() {
@@ -1529,7 +1614,7 @@
         getAttacks();
         getInfo();
         getAvailableCountries();
-        setInterval(getAttacks, 5000);
+        setInterval(getAttacks, 60000);
     });
 
     $(".saveSettingsBtn").click(function(e) {
