@@ -99,11 +99,41 @@
                                     <div class="user">
                                         <div class="user-info">
                                             <span class="name">
+                                               Preset Settings
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                <div class="ticket-reply">
+                                    <div class="ticket-reply-message markdown-content">
+                                        <div class="form-row">
+                                                <label for="presetSelector">Select Preset:</label>
+                                                <select id="presetSelector" class="form-control">
+                                                    <option value="custom">Custom</option>
+                                                </select>
+
+                                            <br> <br><small id="showPresetDescription"></small>
+
+
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="card mb-3">
+                                <div class="ticket-reply-top">
+                                    <div class="user">
+                                        <div class="user-info">
+                                            <span class="name">
                                                 Mitigation Settings
                                             </span>
                                         </div>
                                     </div>
                                 </div>
+
 
                                 <div class="ticket-reply">
                                     <div class="ticket-reply-message markdown-content">
@@ -146,6 +176,20 @@
                                             </label>
                                             <br><small>Additional TCP checks to validate established connections.</small>
                                         </div>
+
+                                        <div class="form-check mt-3">
+                                            <input
+                                                    type="checkbox"
+                                                    class="form-check-input"
+                                                    id="discovery"
+                                                    name="discovery"
+                                            >
+                                            <label class="form-check-label" for="discovery">
+                                                Profile discovery (beta)
+                                            </label>
+                                            <br><small>Automatically create mitigation profiles based on deep packet inspection. This feature is currently in development and may not be fully accurate.</small>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -960,6 +1004,39 @@
     var availableCountries = [];
     var currentProfile = null;
 
+    let profilePresets = [];
+
+    function loadProfilePresets() {
+        const ip = getSelectedIp();
+        $.post("/modules/addons/neoprotect_module/ajax.php", {
+            action: "getProfilePresets",
+            ip
+        }, function(data) {
+            profilePresets = data || [];
+            const $select = $("#presetSelector");
+            $select.empty();
+            $select.append(`<option value="custom">Custom</option>`);
+            profilePresets.forEach(p => {
+                $select.append(`<option value="${p.id}">${p.name}</option>`);
+            });
+
+            updatePresetDescription($select.val());
+        });
+    }
+
+    function updatePresetDescription(selectedId) {
+        const preset = profilePresets.find(p => p.id == selectedId);
+        if (preset) {
+            $("#showPresetDescription").text(preset.description || "No description available.");
+        } else {
+            $("#showPresetDescription").text(
+                selectedId === 'custom'
+                    ? "Custom (no preset)"
+                    : "No preset selected."
+            );
+        }
+    }
+
     function loadPresets() {
         $.get("/modules/addons/neoprotect_module/ajax.php", { action: "getPresets", ip: ip }, function(data){
             var protocol = $("#protocolSelect").val();
@@ -1280,6 +1357,54 @@
         toastr.success("Default action saved successfully");
     });
 
+    function applyPreset(settings) {
+        // Default action
+        $("#defaultAction").val(settings.defaultAction).trigger("change");
+
+        // ASN filtering
+        $("#asnBlockMode").val(settings.asnBlockMode).trigger("change");
+        asnList = settings.asnBlockList || [];
+        updateAsnTable();
+
+        // Country filtering
+        $("#countryBlockMode").val(settings.countryBlockMode).trigger("change");
+        selectedCountryList = settings.countryBlockList || [];
+        updateCountryTable();
+
+        // Attack basics
+        $("#attackDuration").val(settings.attackDuration).trigger("input");
+        $("#allowEgress").prop("checked", settings.allowEgress).trigger("change");
+        $("#ackCheck").prop("checked", settings.ackCheck).trigger("change");
+
+        // Symmetric toggles
+        $("#symmetricFiltering").prop("checked", settings.symmetrical).trigger("change");
+        $("#symmetricFiltering2").prop("checked", settings.symmetricalBasic).trigger("change");
+
+        // Discovery toggle
+        $("#discovery").prop("checked", settings.discovery).trigger("change");
+
+        // Threshold inputs
+        $("#synThreshold").val(settings.synThreshold).trigger("input");
+        $("#ackThreshold").val(settings.ackThreshold).trigger("input");
+        $("#firstFragmentThreshold").val(settings.firstFragmentThreshold).trigger("input");
+        $("#fragmentThreshold").val(settings.fragmentThreshold).trigger("input");
+        $("#ampThreshold").val(settings.ampThreshold).trigger("input");
+        $("#udpThreshold").val(settings.udpThreshold).trigger("input");
+        $("#symmetricThreshold").val(settings.symmetricThreshold).trigger("input");
+
+        // Connection limits
+        $("#tcpConnLimit").val(settings.tcpConnLimit).trigger("input");
+        $("#tcpConnBytesLimit").val(settings.tcpConnBytesLimit).trigger("input");
+        $("#udpConnLimit").val(settings.udpConnLimit).trigger("input");
+        $("#udpConnBytesLimit").val(settings.udpConnBytesLimit).trigger("input");
+        $("#udpNewConnLimit").val(settings.udpNewConnLimit).trigger("input");
+
+        // Other limits
+        $("#synLimit").val(settings.synLimit).trigger("input");
+        $("#icmpLimit").val(settings.icmpLimit).trigger("input");
+        $("#udpLengthBytesLimit").val(settings.udpLengthBytesLimit).trigger("input");
+    }
+
     function getInfo() {
         const ip = getSelectedIp();
 
@@ -1335,6 +1460,7 @@
             const ackCheck = settings.ackCheck;
             const synLimit = settings.synLimit;
             const cache = settings.cache;
+            const discovery = settings.discovery;
 
 
             $("#defaultAction").val(defaultAction);
@@ -1389,6 +1515,10 @@
                 $("#symmetricFiltering2").prop("checked", true);
             }
 
+            if (discovery) {
+                $("#discovery").prop("checked", true);
+            }
+
             $("#synThreshold").val(synThreshold);
             $("#ackThreshold").val(ackThreshold);
             $("#firstFragmentThreshold").val(firstFragmentThreshold);
@@ -1406,8 +1536,10 @@
             $("#icmpLimit").val(icmpLimit);
             $("#udpLengthBytesLimit").val(udpLengthBytesLimit);
 
-
-
+            const match = profilePresets.find(p => JSON.stringify(p.settings) === JSON.stringify(settings));
+            const sel = match ? match.id : 'custom';
+            $("#presetSelector").val(sel);
+            updatePresetDescription(sel);
         });
     }
 
@@ -1567,6 +1699,7 @@
         const synLimit = $("#synLimit").val();
         const icmpLimit = $("#icmpLimit").val();
         const udpLengthBytesLimit = $("#udpLengthBytesLimit").val();
+        const discovery = $("#discovery").prop("checked");
 
         if (!symmetrical) {
             const symmetricalBasic = false;
@@ -1594,7 +1727,8 @@
             udpNewConnLimit,
             synLimit,
             icmpLimit,
-            udpLengthBytesLimit
+            udpLengthBytesLimit,
+            discovery
         });
 
         toastr.success("Settings saved successfully");
@@ -1609,12 +1743,41 @@
         }
     });
 
+    $(document).on("input change", "#overviewForm input, #overviewForm select", function() {
+        if (this.id !== 'profilePresets') {
+            $("#profilePresets").val('custom');
+        }
+    });
+
+    $(document).on("change", "#presetSelector", function() {
+        const id = $(this).val();
+        updatePresetDescription(id);
+        if (id === 'custom') {
+            // Reload current settings when switching back to custom
+            getInfo();
+        } else {
+            const preset = profilePresets.find(p => p.id == id);
+            if (preset) applyPreset(preset.settings);
+        }
+    });
+
     $(document).ready(function() {
         loadProfiles();
+        loadProfilePresets();
         getAttacks();
         getInfo();
         getAvailableCountries();
         setInterval(getAttacks, 60000);
+    });
+
+    $(document).on("change", "#profilePresets", function() {
+        const selectedId = $(this).val();
+        if (selectedId !== 'custom') {
+            const preset = profilePresets.find(p => p.id === selectedId);
+            //if (preset) applyPreset(preset.settings);
+        }
+
+        $("#showPresetDescription").text(preset ? preset.description || "No description available." : "No preset selected.");
     });
 
     $(".saveSettingsBtn").click(function(e) {
