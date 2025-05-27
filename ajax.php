@@ -26,7 +26,6 @@ function apiRequest($url, $method, $data = null) {
     return json_decode($response, true);
 }
 
-
 function getInfo($ip){
     $url = "https://api.neoprotect.net/v2/ips/$ip";
     return apiRequest($url, "GET");
@@ -100,8 +99,15 @@ switch ($action) {
         echo json_encode($response);
         break;
 
+
     case 'getPresets':
         $url = "https://api.neoprotect.net/v2/profiles/presets";
+        $response = apiRequest($url, "GET");
+        echo json_encode($response);
+        break;
+
+    case 'getProfilePresets':
+        $url = "https://api.neoprotect.net/v2/ips/presets";
         $response = apiRequest($url, "GET");
         echo json_encode($response);
         break;
@@ -211,6 +217,7 @@ switch ($action) {
         $synLimit = isset($_REQUEST['synLimit']) ? $_REQUEST['synLimit'] : 5000;
         $icmpLimit = isset($_REQUEST['icmpLimit']) ? $_REQUEST['icmpLimit'] : 512;
         $udpLengthBytesLimit = isset($_REQUEST['udpLengthBytesLimit']) ? $_REQUEST['udpLengthBytesLimit'] : 12500000;
+        $discovery = isset($_REQUEST['discovery']) ? $_REQUEST['discovery'] : false;
 
         $data = [
             "attackDuration" => $attackDuration,
@@ -233,6 +240,7 @@ switch ($action) {
             "synLimit" => $synLimit,
             "icmpLimit" => $icmpLimit,
             "udpLengthBytesLimit" => $udpLengthBytesLimit,
+            "discovery" => $discovery,
             "autoMitigation" => false,
             "localMinPort" => 32768,
             "localMaxPort" => 61000,
