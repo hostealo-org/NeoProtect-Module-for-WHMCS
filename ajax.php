@@ -26,6 +26,7 @@ function apiRequest($url, $method, $data = null) {
     return json_decode($response, true);
 }
 
+
 function getInfo($ip){
     $url = "https://api.neoprotect.net/v2/ips/$ip";
     return apiRequest($url, "GET");
@@ -36,9 +37,10 @@ function getAttacks($ip){
     return apiRequest($url, "GET");
 }
 
-
-
-
+function getAttackInfo($attackId) {
+    $url = "https://api.neoprotect.net/v2/ips/attacks/$attackId/stats";
+    return apiRequest($url, "GET");
+}
 
 function verifyIpOwnership($userId, $ip) {
     $command = 'GetClientsProducts';
@@ -88,6 +90,16 @@ if (!verifyIpOwnership($clientId, $ip)) {
 }
 
 switch ($action) {
+    case 'getAttackInfo':
+        $attackId = isset($_REQUEST['id']) ? $_REQUEST['id'] : null;
+        if (!$attackId) {
+            echo json_encode(['error' => 'Missing attackId.']);
+            exit;
+        }
+        $response = getAttackInfo($attackId);
+        echo json_encode($response);
+        break;
+
     case 'getPresets':
         $url = "https://api.neoprotect.net/v2/profiles/presets";
         $response = apiRequest($url, "GET");
@@ -122,10 +134,12 @@ switch ($action) {
             exit;
         }
 
+        // if notes empty remove it
         if (empty($dataArray['notes'])) {
             unset($dataArray['notes']);
         }
-  
+
+        // add listId: "" to the data array
         $dataArray['listId'] = "";
 
         $url = "https://api.neoprotect.net/v2/ips/$ip/profiles";
